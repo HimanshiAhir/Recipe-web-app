@@ -1,6 +1,7 @@
-import { getJSON, sendJSON } from './helpers.js';
+// import { getJSON, sendJSON } from './helpers.js';
+import { AJAX } from './helpers.js';
 import 'core-js/./es/symbol';
-import { API_URL, RES_PER_PAGE, POPUP_KEY } from './config.js';
+import { API_URL, RES_PER_PAGE, KEY } from './config.js';
 import 'regenerator-runtime';
 import { async } from 'regenerator-runtime';
 import { entries } from 'core-js/./es/array';
@@ -14,22 +15,27 @@ export const state = {
     },
     bookmarks: [],
 };
+
+const crateRecipeObject = function(data) {
+    const { recipe } = data.data;
+    return {
+    id: recipe.id,
+    title: recipe.title,
+    publisher: recipe.publisher,
+    sourceUrl: recipe.source_url,
+    image: recipe.image_url,
+    servings: recipe.servings,
+    cookingTime: recipe.cooking_time,
+    ingredients: recipe.ingredients,
+    ...(recipe.key && {key: recipe.key}), 
+    };
+};
+
 export const loadRecipe = async function (id) {
     try{
 
-    const data = await getJSON(`${API_URL}${id}`);
-
-    const {recipe} = data.data;
-    state.recipe = {
-      id: recipe.id,
-      title: recipe.title,
-      publisher: recipe.publisher,
-      sourceURL: recipe.source_url,
-      image: recipe.image_url,
-      servings: recipe.servings,
-      cookingTime: recipe.cooking_time,
-      ingredients: recipe.ingredients,
-    }
+    const data = await AJAX(`${API_URL}${id}?key=${KEY}`);
+    state.recipe = crateRecipeObject(data);
 
     if(state.bookmarks.some(bookmark => bookmark.id === id))
         state.recipe.bookmarked = true;
@@ -45,7 +51,7 @@ export const loadSearchResults = async function(query){
     try{
         state.search.query = query;
 
-        const data = await getJSON(`${API_URL}?search=${query}`);
+        const data = await AJAX(`${API_URL}?search=${query}&key=${KEY}`);
 
         state.search.results = data.data.recipes.map(rec => {
             return {
@@ -53,6 +59,7 @@ export const loadSearchResults = async function(query){
                 title: rec.title,
                 publisher: rec.publisher,
                 image: rec.image_url,
+                ...(rec.key && {key: rec.key}),
             };
         });
         state.search.page = 1;
@@ -122,7 +129,8 @@ export const uploadRecipe = async function(newRecipe) {
     const ingredients = Object.entries(newRecipe)
         .filter(entry => entry[0].startsWith('ingredient') && entry[1] !== '')
         .map(ing=> {
-         const ingArr = ing[1].replaceAll(' ', '').split(',');
+         const ingArr = ing[1].split(',').map(el => el.trim());
+        //  const ingArr = ing[1].replaceAll(' ', '').split(',');
 
         if(ingArr.length !==3) 
             throw new Error(
@@ -136,15 +144,16 @@ export const uploadRecipe = async function(newRecipe) {
 
         const recipe = {
             title: newRecipe.title,
-            source_url: newRecipe.source_url,
+            source_url: newRecipe.sourceUrl,
             image_url: newRecipe.image,
             publisher: newRecipe.publisher,
             cooking_time: +newRecipe.cookingTime,
             servings: +newRecipe.servings,
             ingredients,
         }
-        const data = await sendJSON(`${API_URL}?key=${POPUP_KEY}`, recipe);
-        console.log(data);
+        const data = await AJAX(`${API_URL}?key=${KEY}`, recipe);
+        state.recipe = crateRecipeObject(data);
+        addBookmark(state.recipe);
     }catch(err){
         throw err; 
     }
